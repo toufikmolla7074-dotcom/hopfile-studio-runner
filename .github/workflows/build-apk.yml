@@ -26,7 +26,6 @@ jobs:
         run: |
           echo "Initializing lightweight Gradle project structure..."
           # Create template directory trees
-          mkdir -p settings.gradle
           mkdir -p app/src/main/java/com/example/runner
           mkdir -p app/src/main/assets
           mkdir -p app/src/main/res/values
@@ -56,7 +55,7 @@ jobs:
           }
           EOF
 
-          # 3. Create app/build.gradle with dynamic package placeholder replacement
+          # 3. Create app/build.gradle with direct dynamic parameters from trigger payload
           cat << 'EOF' > app/build.gradle
           plugins {
               id 'com.android.application'
@@ -67,11 +66,11 @@ jobs:
               compileSdk 33
 
               defaultConfig {
-                  applicationId "PACKAGE_ID_PLACEHOLDER"
+                  applicationId "${{ github.event.client_payload.packageId }}"
                   minSdk 24
                   targetSdk 33
-                  versionCode 1
-                  versionName "1.0"
+                  versionCode ${{ github.event.client_payload.versionCode }}
+                  versionName "${{ github.event.client_payload.versionName }}"
               }
 
               buildTypes {
@@ -86,9 +85,6 @@ jobs:
               implementation 'androidx.appcompat:appcompat:1.6.1'
           }
           EOF
-
-          # Replace package ID in app/build.gradle
-          sed -i "s/PACKAGE_ID_PLACEHOLDER/${{ github.event.client_payload.packageId }}/" app/build.gradle
 
           # 4. Create AndroidManifest.xml
           cat << 'EOF' > app/src/main/AndroidManifest.xml
@@ -158,14 +154,12 @@ jobs:
           }
           EOF
 
-          # 6. Create strings.xml with dynamic App Name
+          # 6. Create strings.xml with direct dynamic App Name from trigger payload
           cat << 'EOF' > app/src/main/res/values/strings.xml
           <resources>
-              <string name="app_name">APP_NAME_PLACEHOLDER</string>
+              <string name="app_name">${{ github.event.client_payload.appName }}</string>
           </resources>
           EOF
-
-          sed -i "s/APP_NAME_PLACEHOLDER/${{ github.event.client_payload.appName }}/" app/src/main/res/values/strings.xml
 
       - name: Fetch and Wrap Website Archive ZIP
         run: |
@@ -175,18 +169,29 @@ jobs:
           echo "Extracting workspace targets deep into assets folder..."
           unzip -o web_payload.zip -d app/src/main/assets/
           
-          # Clean up download zip
+          # Smart Extraction Check: if index.html is in a subfolder, bring contents to root of assets
+          if [ ! -f app/src/main/assets/index.html ]; then
+              echo "index.html not found in assets root. Checking subdirectories..."
+              SUBDIR=$(find app/src/main/assets/ -name "index.html" -print -quit | sed 's|/index.html||')
+              if [ -n "$SUBDIR" ] && [ "$SUBDIR" != "app/src/main/assets" ]; then
+                  echo "Found index.html in directory: $SUBDIR. Flattening contents..."
+                  mv "$SUBDIR"/* app/src/main/assets/
+              else
+                  echo "WARNING: index.html not found in package payload!"
+              fi
+          fi
+          
+          # Clean up downloaded zip
           rm web_payload.zip
 
       - name: Setup Gradle
         uses: gradle/actions/setup-gradle@v3
+        with:
+          gradle-version: '8.2'
 
       - name: Run APK Compile Gradle Task
         run: |
-          # Generate compiler wrapper gradle structure
-          gradle wrapper
-          # Run compilation in parallel debug format for swift install
-          ./gradlew :app:assembleDebug
+          gradle :app:assembleDebug
 
       - name: Deploy Compiled Artifact Back to Repository
         run: |
