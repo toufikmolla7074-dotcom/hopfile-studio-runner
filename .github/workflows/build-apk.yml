@@ -211,3 +211,25 @@ jobs:
           git add builds/app-debug.apk
           git commit -m "dist: update compiled android package for '${{ github.event.client_payload.appName }}'" || echo "No changes detected inside binary stream."
           git push origin main || git push origin master || echo "Push failed, continuing pipeline..."
+
+      - name: Generate Unique Release Tag
+        id: tag_gen
+        run: |
+          CLEANED_NAME=$(echo "${{ github.event.client_payload.appName }}" | tr -cd '[:alnum:]_')
+          TAG="release-${CLEANED_NAME}-${{ github.run_number }}"
+          echo "TAG_NAME=$TAG" >> $GITHUB_OUTPUT
+
+      - name: Create GitHub Release and Upload APK
+        uses: softprops/action-gh-release@v1
+        with:
+          tag_name: ${{ steps.tag_gen.outputs.TAG_NAME }}
+          name: "Release: ${{ github.event.client_payload.appName }} (v${{ github.event.client_payload.versionName }})"
+          body: |
+            Automated Android package build for **${{ github.event.client_payload.appName }}**
+            - **Package ID:** `${{ github.event.client_payload.packageId }}`
+            - **Build ID:** `${{ github.run_number }}`
+          files: app/build/outputs/apk/debug/app-debug.apk
+          draft: false
+          prerelease: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
