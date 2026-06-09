@@ -165,8 +165,11 @@ jobs:
 
       - name: Fetch and Wrap Website Archive ZIP
         run: |
-          echo "Downloading web workspace ZIP archive from live source payload..."
-          curl -L -o web_payload.zip "${{ github.event.client_payload.zipUrl }}"
+          echo "Verifying local web workspace ZIP archive inside repository..."
+          if [ ! -f web_payload.zip ]; then
+              echo "ERROR: web_payload.zip not found in repository!"
+              exit 1
+          fi
           
           echo "Extracting workspace targets deep into assets folder..."
           unzip -o web_payload.zip -d app/src/main/assets/
@@ -183,19 +186,19 @@ jobs:
               fi
           fi
           
-          # Clean up downloaded zip
+          # Clean up zip
           rm web_payload.zip
 
-      - name: Setup Gradle
+       - name: Setup Gradle
         uses: gradle/actions/setup-gradle@v3
         with:
           gradle-version: '8.2'
 
-      - name: Run APK Compile Gradle Task
+       - name: Run APK Compile Gradle Task
         run: |
           gradle :app:assembleDebug
 
-      - name: Deploy Compiled Artifact Back to Repository
+       - name: Deploy Compiled Artifact Back to Repository
         run: |
           echo "Setting up repository output folders..."
           mkdir -p builds
